@@ -1,0 +1,13 @@
+# 手搓 Agent 系列配套代码的全部第三方依赖，一共三个。
+# Python 3.12（fastmcp 4 要求 >= 3.10）。
+#
+# openai   当 HTTP 客户端用，连任何 OpenAI 兼容端点。01-05、09 要
+# fastmcp  MCP Server 与 Client。05、09 的 --mcp 要
+# httpx    MCP Server 那半边调 Open-Meteo。05、09 的 --mcp 要
+#
+# 只跑不调模型的那几篇（06、07、08，以及 09 的 --selftest / --check），
+# 三个都不装也能跑，标准库就够。
+
+openai>=3.0,<4
+fastmcp>=4.0,<5
+httpx>=0.28,<1
