@@ -8,8 +8,8 @@ agent-in-action/
 │  ├─ 01-agent-from-scratch/
 │  ├─ …
 │  └─ 09-agent-full-loop/
-├─ part2-agent-frameworks/   《Agent 框架系列》：常用框架怎么用，对得上上面哪一层
-├─ requirements.txt          三个依赖，整个工程共用一份
+├─ part2-agent-frameworks/   《Agent 框架系列》：一个目录一层，公共函数在目录根
+├─ requirements.txt          整个工程共用一份
 └─ .env.example              复制成 .env 填 key
 ```
 
@@ -17,7 +17,7 @@ agent-in-action/
 
 ## 环境准备
 
-Python 3.12，依赖只有三个：
+Python 3.12。part1 三个依赖，part2 再加 langchain / langgraph 那几个，整份工程共用一个 `requirements.txt`：
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -38,9 +38,9 @@ pip install -r requirements.txt
 cp .env.example .env   # 填上 key，.env 已在 .gitignore 里
 ```
 
-环境变量优先于 `.env`：终端 export 过的、IDE 运行配置里填的，都压过文件。`01`–`05` 和 `09` 都会读这份文件。
+环境变量优先于 `.env`：终端 export 过的、IDE 运行配置里填的，都压过文件。part1 的 `01`–`05`、`09`，以及 part2 各层，都读这份文件。part2 的加载和接模型在 `part2-agent-frameworks/env.py`，各层 `from env import chat_model`。
 
-不调模型的那几篇不需要 key，标准库就能跑：`06`、`07`、`08`，以及 `09` 的 `--selftest` / `--check`。
+不调模型的那几篇不需要 key，标准库就能跑：part1 的 `06`、`07`、`08`，以及 `09` 的 `--selftest` / `--check`。
 
 ## part1-handmade-agent · 手搓 Agent 系列
 
@@ -89,4 +89,15 @@ imports → 读 .env → SYSTEM_PROMPT / GOAL → 工具 → REGISTRY / TOOL_SCH
 
 ## part2-agent-frameworks · Agent 框架系列
 
-还没开始写。
+先只开 LangGraph。一个目录一层，对着手搓往上加。读环境和接模型在 `env.py`。
+
+| 目录 | 这一层 | 对上 part1 |
+| --- | --- | --- |
+| `langgraph/01-min-loop/` | 两个节点：问模型、执行回灌 | `01-agent-from-scratch` |
+
+```bash
+cd part2-agent-frameworks/langgraph/01-min-loop
+python agent.py
+```
+
+过关：轨迹里先 `search_location`，再 `get_current_weather`，终答里的温度对得上后一次回灌。

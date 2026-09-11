@@ -1,13 +1,29 @@
-# 手搓 Agent 系列配套代码的全部第三方依赖，一共三个。
-# Python 3.12（fastmcp 4 要求 >= 3.10）。
+# 博客各 Agent 系列配套代码的全部第三方依赖，整个工程共用一份。
+# Python 3.12（fastmcp 4 要求 >= 3.10，langchain 1 也是）。
 #
-# openai   当 HTTP 客户端用，连任何 OpenAI 兼容端点。01-05、09 要
-# fastmcp  MCP Server 与 Client。05、09 的 --mcp 要
-# httpx    MCP Server 那半边调 Open-Meteo。05、09 的 --mcp 要
+# part1 手搓 —— 不引框架，三个：
+#   openai   当 HTTP 客户端用，连任何 OpenAI 兼容端点。01-05、09 要
+#   fastmcp  MCP Server 与 Client。05、09 的 --mcp 要
+#   httpx    MCP Server 那半边调 Open-Meteo。05、09 的 --mcp 要
 #
-# 只跑不调模型的那几篇（06、07、08，以及 09 的 --selftest / --check），
-# 三个都不装也能跑，标准库就够。
+# part2 框架 —— 先只有 langgraph 这一条支线，四个：
+#   langchain                    init_chat_model / @tool / create_agent 与 middleware
+#   langchain-openai             init_chat_model 连 OpenAI 兼容端点走它
+#   langgraph                    StateGraph / interrupt / Command / Send / store
+#   langgraph-checkpoint-sqlite  SqliteSaver：进程退出之后还能续跑
+#
+# part2 的 env.py 用 -e . 装进 venv，各层 from env import chat_model，
+# 不用改 sys.path。
+#
+# 两部分互不依赖：只跑 part1 不必装后四个和 -e .。不调模型的那几篇（06、07、08，
+# 以及 09 的 --selftest / --check），这些都不装也能跑，标准库就够。
 
 openai>=3.0,<4
 fastmcp>=4.0,<5
 httpx>=0.28,<1
+
+langchain>=1.4,<2
+langchain-openai>=1.6,<2
+langgraph>=1.2,<2
+langgraph-checkpoint-sqlite>=3.1,<4
+-e .
