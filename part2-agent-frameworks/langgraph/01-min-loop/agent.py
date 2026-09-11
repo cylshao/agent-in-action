@@ -2,12 +2,14 @@
 01-min-loop
 
 把手搓那个 while 画成图：agent 问模型，tools 执行并回灌。
-两个天气工具，Open-Meteo。不落盘，不停住。
+天气走 Open-Meteo，订房用本地假库存。不落盘，不停住。
 """
 
 from __future__ import annotations
 
-from typing import Annotated, TypedDict
+import re
+from datetime import datetime
+from typing import Annotated, Literal, TypedDict
 
 import httpx
 from langchain.messages import HumanMessage, SystemMessage
@@ -18,13 +20,16 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from env import chat_model
 
-# 模型只看见 SYSTEM 和 @tool 的 docstring，看不见函数体。
+# 模型只看见 SYSTEM 和 @tool 的 docstring / 类型，看不见函数体。
 SYSTEM = (
-    "只能通过工具获取事实，不要编温度或坐标。"
+    "只能通过工具获取事实，不要编温度、坐标、房价或 hotel_id。"
     "没有坐标时先 search_location，再 get_current_weather。"
-    "拿到数据后给出终答，带上温度、体感和湿度。"
+    "订房没有 hotel_id 时先 search_hotels，再 book_hotel。"
+    "有依赖的下一步，等回灌之后再调，不要同一轮一起调。"
+    "用户只是询问有没有房或多少钱时不要下单。"
+    "给出终答，带上天气、酒店名、房型、入住日期和总价。"
 )
-GOAL = "西安现在天气怎么样？"
+GOAL = "西安现在天气怎么样？再帮我订一间豪华套房，2026 年 10 月 1 日住两晚。"
 http = httpx.Client(timeout=10.0)
 
 
@@ -82,6 +87,126 @@ def get_current_weather(latitude: float, longitude: float) -> dict:
     }
 
 
+class Hotel(TypedDict):
+    id: str
+    name: str
+    city: str
+    room_types: list[str]
+    price_per_night: dict[str, int]
+
+
+# 本地假库存。真实项目里这是下游服务；这里用来演示校验，不打外部订房接口。
+INVENTORY: list[Hotel] = [
+    {
+        "id": "HT-001",
+        "name": "西安钟楼饭店",
+        "city": "西安",
+        "room_types": ["standard", "deluxe"],
+        "price_per_night": {"standard": 180, "deluxe": 260},
+    },
+    {
+        "id": "HT-002",
+        "name": "西安香格里拉",
+        "city": "西安",
+        "room_types": ["standard", "deluxe", "suite"],
+        "price_per_night": {"standard": 150, "deluxe": 220, "suite": 400},
+    },
+    {
+        "id": "HT-003",
+        "name": "回民街文化酒店",
+        "city": "西安",
+        "room_types": ["standard"],
+        "price_per_night": {"standard": 110},
+    },
+]
+
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# 本次 invoke 里搜索过的 hotel_id。book_hotel 只接受名单内的 id。
+seen_hotel_ids: set[str] = set()
+
+
+def _check_in(value: str) -> str | dict:
+    if not DATE_RE.match(value):
+        return {"error": "check_in 必须是 YYYY-MM-DD，例如 2026-10-01"}
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return {"error": f"check_in 不是合法日期: {value}"}
+    return value
+
+
+# Literal 对照 enum；docstring 对照 description。
+@tool
+def search_hotels(city: str, check_in: str) -> dict:
+    """按城市和入住日期搜索可订酒店，返回 id、房型和每晚价格。
+    用户只给了城市名、还没有 hotel_id 时先调它。不要用它下单。
+    check_in 格式 YYYY-MM-DD，例如 2026-10-01。"""
+    checked = _check_in(check_in)
+    if isinstance(checked, dict):
+        return checked
+    hits: list[Hotel] = []
+    for h in INVENTORY:
+        if city in h["city"] or h["city"] in city:
+            hotel_id = h["id"]
+            seen_hotel_ids.add(hotel_id)
+            hits.append(
+                {
+                    "id": hotel_id,
+                    "name": h["name"],
+                    "city": h["city"],
+                    "room_types": h["room_types"],
+                    "price_per_night": h["price_per_night"],
+                }
+            )
+    if not hits:
+        return {"error": f"没有找到城市 {city} 的可订酒店，请换一个城市名"}
+    return {"check_in": checked, "hotels": hits}
+
+
+@tool
+def book_hotel(
+    hotel_id: str,
+    room_type: Literal["standard", "deluxe", "suite"],
+    check_in: str,
+    nights: int,
+) -> dict:
+    """用 search_hotels 返回的 hotel_id 预订房间。
+    没有 hotel_id 时不要编一个，先搜。
+    用户只是询问有没有房或多少钱时不要调用。
+    hotel_id 形如 HT-001，不是酒店名。nights 是 1 到 14 的整数。"""
+    # 白名单在函数体里，schema 里没有这一项。
+    if hotel_id not in seen_hotel_ids:
+        return {
+            "error": (
+                f"hotel_id {hotel_id} 不在本次搜索结果里。"
+                f"请先 search_hotels，可用 id：{sorted(seen_hotel_ids) or '（还没有，先搜）'}"
+            )
+        }
+    hotel = next((h for h in INVENTORY if h["id"] == hotel_id), None)
+    if hotel is None:
+        return {"error": f"库存里没有 {hotel_id}"}
+    if room_type not in hotel["room_types"]:
+        return {
+            "error": f"{hotel['name']} 没有 {room_type}，可选：{hotel['room_types']}"
+        }
+    checked = _check_in(check_in)
+    if isinstance(checked, dict):
+        return checked
+    if nights < 1 or nights > 14:
+        return {"error": "nights 必须是 1 到 14 的整数"}
+    unit = hotel["price_per_night"][room_type]
+    return {
+        "status": "ok",
+        "hotel_id": hotel_id,
+        "hotel_name": hotel["name"],
+        "room_type": room_type,
+        "check_in": checked,
+        "nights": nights,
+        "total": unit * nights,
+        "currency": "RMB",
+    }
+
+
 class State(TypedDict):
     """图上节点之间传的那份状态。
 
@@ -92,8 +217,8 @@ class State(TypedDict):
     messages: Annotated[list, add_messages]
 
 
-# 顺序故意把天气放前面。模型应靠 description 先搜坐标再查天气，而不是按数组下标。
-TOOLS = [get_current_weather, search_location]
+# 顺序故意把执行类放前面。模型应靠 docstring 先搜再查、先搜后订，而不是按数组下标。
+TOOLS = [book_hotel, get_current_weather, search_hotels, search_location]
 bound = chat_model().bind_tools(TOOLS)
 
 
@@ -132,6 +257,7 @@ def main() -> None:
     每到一个节点就跑一次，tools 回来再进 agent，直到没有 tool_calls。
     返回的是走完之后的整份 State，轨迹都在 result["messages"] 里。
     """
+    seen_hotel_ids.clear()
     result = graph.invoke(
         {
             "messages": [

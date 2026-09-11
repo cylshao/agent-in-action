@@ -8,20 +8,20 @@
 part2-agent-frameworks/
 ├─ env.py                 读 .env，给出 init_chat_model
 └─ langgraph/
-   └─ 01-min-loop/        把手搓那个 while 画成图，先不落盘
+   └─ 01-min-loop/        把手搓那个 while 画成图
 ```
 
 | 目录 | 这一层 | 对上 part1 |
 | --- | --- | --- |
-| `langgraph/01-min-loop/` | 两个节点：问模型、执行回灌 | `01-agent-from-scratch` |
+| `langgraph/01-min-loop/` | 两个节点；天气 + 订房挂同一张图 | `01-agent-from-scratch` + `02-agent-tool-design` |
 
 ## 01-min-loop
 
-把手搓那个 `while` 画成图。`search_location` + `get_current_weather`，走 Open-Meteo，两个节点，不落盘、不停住。配套文章：《LangGraph：用 StateGraph 把手搓那个 while 画成图》。
+把手搓那个 `while` 画成图。天气走 Open-Meteo，订房用本地假库存，`hotel_id` 白名单在函数体里。一次 `invoke` 先看天气再订房。不落盘、不停住。配套文章：《LangGraph：用 StateGraph 把手搓那个 while 画成图》。
 
 ```bash
 cd langgraph/01-min-loop
 python agent.py
 ```
 
-过关：轨迹里先 `search_location`，再 `get_current_weather`，终答里的温度对得上后一次回灌。
+过关：先搜地点再查天气，再 `search_hotels` / `book_hotel`。终答温度对得上天气回灌，`hotel_id` 来自搜索结果，房型是 `suite`。

@@ -93,11 +93,11 @@ imports → 读 .env → SYSTEM_PROMPT / GOAL → 工具 → REGISTRY / TOOL_SCH
 
 | 目录 | 这一层 | 对上 part1 |
 | --- | --- | --- |
-| `langgraph/01-min-loop/` | 两个节点：问模型、执行回灌 | `01-agent-from-scratch` |
+| `langgraph/01-min-loop/` | 两个节点；天气 + 订房挂同一张图 | `01` + `02` |
 
 ```bash
 cd part2-agent-frameworks/langgraph/01-min-loop
 python agent.py
 ```
 
-过关：轨迹里先 `search_location`，再 `get_current_weather`，终答里的温度对得上后一次回灌。
+过关：先搜地点再查天气，再搜酒店下单。终答温度对得上回灌，`hotel_id` 来自搜索结果。
